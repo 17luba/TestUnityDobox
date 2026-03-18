@@ -1,41 +1,60 @@
 using UnityEngine;
 using UnityEngine.UI;
 using OpenCvSharp;
+using System.IO;
 
-// On définit que par défaut, "Rect" dans ce script désigne celui de Unity pour tes variables de zone
+// On définit que par défaut, "Rect" dans ce script désigne celui de Unity
 using Rect = UnityEngine.Rect;
 
 public class CameraManager : MonoBehaviour
 {
+    [Header("Composants Affichage")]
+    public RawImage displayImage;
     private WebCamTexture webCamTexture;
+    private Texture2D texture;
+
+    [Header("Matrices OpenCV")]
     private Mat rgbaMat;
     private Mat grayMat;
     private Mat prevGrayMat;
-    private Mat diffMat;
-    private Texture2D texture;
-    public RawImage displayImage;
 
-    [Header("Paramètres de Détection")]
-    public float thresholdMovement = 25f; // Sensibilité (plus bas = plus sensible)
-    public int minPixelCount = 500;       // Nombre de pixels minimum pour valider un mouvement
+    [Header("Classifiers (Face & Eyes)")]
+    private CascadeClassifier faceCascade;
+    private CascadeClassifier eyeCascade;
 
-    // Zones de détection (en pixels)
-    private Rect zoneLeft = new Rect(50, 50, 150, 150);
-    private Rect zoneRight = new Rect(440, 50, 150, 150);
+    [Header("Réglages Gameplay")]
+    public bool modeHandicap = false; // True = Tête, False = Mains
+    public float angleThreshold = 15f; // Degrés d'inclinaison pour la tête
+    public int thresholdMovement = 25; // Sensibilité mouvement pixels
+    public int minPixelCount = 500;    // Seuil de détection pour les mains
+
+    [Header("Zones de Détection (Mains)")]
+    public Rect handZoneLeft = new Rect(50, 50, 150, 150);
+    public Rect handZoneRight = new Rect(440, 50, 150, 150);
+
+    // Variable Statique pour que le script des Notes puisse la lire
+    public static string lastAction = "";
+    private float actionTimer = 0f;
 
     void Start()
     {
+        // 1. Chargement des fichiers XML (doivent être dans Assets/StreamingAssets)
+        string facePath = Path.Combine(Application.streamingAssetsPath, "haarcascade_frontalface_default.xml");
+        string eyePath = Path.Combine(Application.streamingAssetsPath, "haarcascade_eye.xml");
+
+        faceCascade = new CascadeClassifier(facePath);
+        eyeCascade = new CascadeClassifier(eyePath);
+
+        // 2. Initialisation WebCam
         WebCamDevice[] devices = WebCamTexture.devices;
         if (devices.Length > 0)
         {
             webCamTexture = new WebCamTexture(devices[0].name, 640, 480, 30);
             webCamTexture.Play();
 
-            // Initialisation des matrices
             rgbaMat = new Mat(480, 640, MatType.CV_8UC4);
             grayMat = new Mat();
             prevGrayMat = new Mat();
-            diffMat = new Mat();
 
             texture = new Texture2D(640, 480, TextureFormat.RGBA32, false);
             displayImage.texture = texture;
@@ -46,78 +65,147 @@ public class CameraManager : MonoBehaviour
     {
         if (webCamTexture != null && webCamTexture.didUpdateThisFrame)
         {
-            // 1. Conversion WebCam vers Mat
+            // 1. On récupère l'image actuelle
             rgbaMat = OpenCvSharp.Unity.TextureToMat(webCamTexture);
-
-            // Effet miroir (très important pour le gameplay)
             Cv2.Flip(rgbaMat, rgbaMat, FlipMode.Y);
 
-            // 2. Préparation de l'image pour la détection
+            // 2. On prépare la version Grise pour les calculs
             Cv2.CvtColor(rgbaMat, grayMat, ColorConversionCodes.RGBA2GRAY);
-            Cv2.GaussianBlur(grayMat, grayMat, new Size(5, 5), 0);
+            Cv2.GaussianBlur(grayMat, grayMat, new Size(5, 5), 0); // Réduit le bruit numérique
 
-            if (!prevGrayMat.Empty())
+            // 3. ON DÉTECTE (Seulement si on a une image précédente avec laquelle comparer)
+            if (prevGrayMat != null && !prevGrayMat.Empty())
             {
-                // 3. Calcul de la différence de mouvement
-                Cv2.Absdiff(grayMat, prevGrayMat, diffMat);
-                Cv2.Threshold(diffMat, diffMat, thresholdMovement, 255, ThresholdTypes.Binary);
-
-                // 4. Analyse des zones
-                CheckZone(diffMat, zoneLeft, "Gauche");
-                CheckZone(diffMat, zoneRight, "Droite");
+                if (modeHandicap)
+                {
+                    DetectTiltByEyes();
+                }
+                else
+                {
+                    DetectHandMovement();
+                }
             }
 
-            // Sauvegarde pour la frame suivante
-            grayMat.CopyTo(prevGrayMat);
+            // 4. Feedback visuel (Dessin des carrés)
+            DrawUIZones();
+            UpdateActionTimer();
 
-            // 5. Feedback visuel sur l'image finale
-            DrawZones();
+            // 5. ON SAUVEGARDE l'image actuelle pour la frame suivante (IMPORTANT)
+            if (prevGrayMat.Empty() || prevGrayMat.Size() != grayMat.Size())
+            {
+                prevGrayMat = grayMat.Clone();
+            }
+            else
+            {
+                grayMat.CopyTo(prevGrayMat);
+            }
 
-            // 6. Affichage
+            // 6. Affichage écran
             OpenCvSharp.Unity.MatToTexture(rgbaMat, texture);
         }
     }
 
-    void CheckZone(Mat source, Rect zone, string side)
+    // --- LOGIQUE TÊTE (HANDICAP) ---
+    void DetectTiltByEyes()
     {
-        // Conversion explicite du Rect Unity vers le Rect OpenCV
-        OpenCvSharp.Rect cvRect = new OpenCvSharp.Rect((int)zone.x, (int)zone.y, (int)zone.width, (int)zone.height);
+        var faces = faceCascade.DetectMultiScale(grayMat, 1.1, 5);
+        if (faces.Length == 0) return;
 
-        // Vérification de sécurité pour ne pas sortir des limites de l'image
-        cvRect = cvRect.Intersect(new OpenCvSharp.Rect(0, 0, source.Cols, source.Rows));
+        OpenCvSharp.Rect f = faces[0];
+        Cv2.Rectangle(rgbaMat, f, Scalar.Yellow, 2);
 
-        // On extrait la zone d'intérêt (ROI)
-        using (Mat roi = new Mat(source, cvRect))
+        // Zone des yeux (haut du visage)
+        OpenCvSharp.Rect eyeRegion = new OpenCvSharp.Rect(f.X, f.Y + (f.Height / 5), f.Width, f.Height / 2);
+        using (Mat faceROI = new Mat(grayMat, eyeRegion))
         {
-            int movementPixels = Cv2.CountNonZero(roi);
+            var eyes = eyeCascade.DetectMultiScale(faceROI, 1.1, 2, 0, new Size(30, 30));
 
-            if (movementPixels > minPixelCount)
+            if (eyes.Length >= 2)
             {
-                Debug.Log("<color=green>MOUVEMENT DÉTECTÉ : </color>" + side + " (" + movementPixels + " px)");
+                System.Array.Sort(eyes, (a, b) => a.X.CompareTo(b.X));
+                Point p1 = new Point(eyeRegion.X + eyes[0].X + eyes[0].Width / 2, eyeRegion.Y + eyes[0].Y + eyes[0].Height / 2);
+                Point p2 = new Point(eyeRegion.X + eyes[1].X + eyes[1].Width / 2, eyeRegion.Y + eyes[1].Y + eyes[1].Height / 2);
+
+                Cv2.Line(rgbaMat, p1, p2, Scalar.Red, 2);
+
+                float deltaY = p2.Y - p1.Y;
+                float deltaX = p2.X - p1.X;
+                float angle = Mathf.Atan2(deltaY, deltaX) * Mathf.Rad2Deg;
+
+                if (angle > angleThreshold) TriggerHit("Droite");
+                else if (angle < -angleThreshold) TriggerHit("Gauche");
             }
         }
     }
 
-    void DrawZones()
+    // --- LOGIQUE MAINS (NORMAL) ---
+    void DetectHandMovement()
     {
-        // On dessine avec des OpenCvSharp.Point pour éviter les conflits
-        Cv2.Rectangle(rgbaMat,
-            new OpenCvSharp.Point((int)zoneLeft.x, (int)zoneLeft.y),
-            new OpenCvSharp.Point((int)(zoneLeft.x + zoneLeft.width), (int)(zoneLeft.y + zoneLeft.height)),
-            Scalar.Green, 2);
+        if (prevGrayMat == null || prevGrayMat.Empty()) return;
 
-        Cv2.Rectangle(rgbaMat,
-            new OpenCvSharp.Point((int)zoneRight.x, (int)zoneRight.y),
-            new OpenCvSharp.Point((int)(zoneRight.x + zoneRight.width), (int)(zoneRight.y + zoneRight.height)),
-            Scalar.Green, 2);
+        CheckMovement(UnityToOpenCVRect(handZoneLeft), minPixelCount, "Gauche");
+        CheckMovement(UnityToOpenCVRect(handZoneRight), minPixelCount, "Droite");
+    }
+
+    void CheckMovement(OpenCvSharp.Rect area, int thresholdPixels, string sideTag)
+    {
+        if (prevGrayMat == null || prevGrayMat.Empty()) return;
+
+        area = area.Intersect(new OpenCvSharp.Rect(0, 0, grayMat.Cols, grayMat.Rows));
+        if (area.Width <= 0 || area.Height <= 0) return;
+
+        using (Mat currROI = new Mat(grayMat, area))
+        using (Mat prevROI = new Mat(prevGrayMat, area))
+        using (Mat diffROI = new Mat())
+        {
+            Cv2.Absdiff(currROI, prevROI, diffROI);
+            Cv2.Threshold(diffROI, diffROI, thresholdMovement, 255, ThresholdTypes.Binary);
+
+            int movement = Cv2.CountNonZero(diffROI);
+
+            // Ligne à ajouter pour débugger : elle affiche le flux de pixels même sans détection
+            // Debug.Log(sideTag + " : " + movement + " pixels en mouvement"); 
+
+            if (movement > thresholdPixels)
+            {
+                TriggerHit(sideTag);
+                Debug.Log("<color=green>SUCCESS : </color>" + sideTag);
+            }
+        }
+    }
+
+    // --- UTILITAIRES ---
+    void TriggerHit(string side)
+    {
+        lastAction = side;
+        actionTimer = 0.2f;
+        Debug.Log("<color=orange>ACTION : </color>" + side);
+    }
+
+    void UpdateActionTimer()
+    {
+        if (actionTimer > 0) actionTimer -= Time.deltaTime;
+        else lastAction = "";
+    }
+
+    void DrawUIZones()
+    {
+        Scalar color = modeHandicap ? new Scalar(255, 255, 0, 50) : Scalar.Green;
+        Cv2.Rectangle(rgbaMat, UnityToOpenCVRect(handZoneLeft), color, 2);
+        Cv2.Rectangle(rgbaMat, UnityToOpenCVRect(handZoneRight), color, 2);
+    }
+
+    OpenCvSharp.Rect UnityToOpenCVRect(Rect r)
+    {
+        return new OpenCvSharp.Rect((int)r.x, (int)r.y, (int)r.width, (int)r.height);
     }
 
     private void OnDestroy()
     {
-        // Nettoyage de la mémoire native
         if (rgbaMat != null) rgbaMat.Dispose();
         if (grayMat != null) grayMat.Dispose();
         if (prevGrayMat != null) prevGrayMat.Dispose();
-        if (diffMat != null) diffMat.Dispose();
+        if (faceCascade != null) faceCascade.Dispose();
+        if (eyeCascade != null) eyeCascade.Dispose();
     }
 }
