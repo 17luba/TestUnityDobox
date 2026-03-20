@@ -306,7 +306,7 @@ GameObject:
   - component: {fileID: 202340108}
   m_Layer: 0
   m_Name: StrikingZoneLeft
-  m_TagString: Untagged
+  m_TagString: HitZone
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -564,6 +564,7 @@ GameObject:
   m_Component:
   - component: {fileID: 577029988}
   - component: {fileID: 577029987}
+  - component: {fileID: 577029989}
   m_Layer: 0
   m_Name: GameManager
   m_TagString: Untagged
@@ -615,6 +616,23 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &577029989
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 577029986}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 804aad0f583ef06418f5205b4db11c3a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  notePrefab: {fileID: 5181263973970065016, guid: feffafc3a92283e4b89939790a21e8ca, type: 3}
+  spawnLeft: {fileID: 1615345077}
+  spawnRight: {fileID: 1922939888}
+  bpm: 60
+  noteSpeed: 4
 --- !u!1 &619394800
 GameObject:
   m_ObjectHideFlags: 0
@@ -950,7 +968,7 @@ GameObject:
   - component: {fileID: 1785908319}
   m_Layer: 0
   m_Name: StrikingZoneRight
-  m_TagString: Untagged
+  m_TagString: HitZone
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
