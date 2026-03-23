@@ -6,34 +6,47 @@ public class MusicManager : MonoBehaviour
     public GameObject notePrefab;
     public Transform spawnLeft;
     public Transform spawnRight;
+    public float spawnInterval = 1.5f;
 
-    [Header("Réglages Rythme")]
-    public float bpm = 60f; // Battements par minute
-    public float noteSpeed = 4f;
+    [Header("Audio")]
+    public AudioSource audioSource;
+    public AudioClip soundLeft;
+    public AudioClip soundRight;
+
+    // Instance statique pour que les notes puissent y accéder facilement
+    public static MusicManager Instance;
+
+    void Awake()
+    {
+        Instance = this;
+    }
 
     void Start()
     {
-        float interval = 60f / bpm;
-        StartCoroutine(SpawnRoutine(interval));
+        StartCoroutine(SpawnRoutine());
     }
 
-    IEnumerator SpawnRoutine(float interval)
+    // Fonction appelée par les notes au moment du Hit
+    public void PlayNoteSound(string side)
+    {
+        if (side == "Gauche")
+            audioSource.PlayOneShot(soundLeft);
+        else
+            audioSource.PlayOneShot(soundRight);
+    }
+
+    IEnumerator SpawnRoutine()
     {
         while (true)
         {
-            yield return new WaitForSeconds(interval);
-
-            // Choisir un côté au hasard
+            yield return new WaitForSeconds(spawnInterval);
             bool isLeft = Random.value > 0.5f;
-            Transform targetSpawn = isLeft ? spawnLeft : spawnRight;
+            Transform t = isLeft ? spawnLeft : spawnRight;
 
-            // Créer la note
-            GameObject note = Instantiate(notePrefab, targetSpawn.position, Quaternion.identity);
-
-            // Configurer la note
-            NoteObject noteScript = note.GetComponent<NoteObject>();
-            noteScript.side = isLeft ? "Gauche" : "Droite";
-            noteScript.speed = noteSpeed;
+            GameObject newNote = Instantiate(notePrefab, t.position, Quaternion.identity);
+            NoteObject script = newNote.GetComponent<NoteObject>();
+            script.side = isLeft ? "Gauche" : "Droite";
+            script.speed = 4f;
         }
     }
 }

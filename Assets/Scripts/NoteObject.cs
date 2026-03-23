@@ -45,7 +45,15 @@ public class NoteObject : MonoBehaviour
     void HitNote()
     {
         Debug.Log("<color=yellow>PARFAIT ! Note " + side + " validée.</color>");
-        // Tu peux ajouter un effet de particules ici
+
+        // SON
+        if (MusicManager.Instance != null)
+        {
+            MusicManager.Instance.PlayNoteSound(side);
+        }
+
         Destroy(gameObject);
+
+        CameraManager.lastAction = ""; // Réinitialiser l'action pour éviter les frappes multiples
     }
 }
