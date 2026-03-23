@@ -200,12 +200,30 @@ public class CameraManager : MonoBehaviour
         return new OpenCvSharp.Rect((int)r.x, (int)r.y, (int)r.width, (int)r.height);
     }
 
+    // private void OnDisable()
+    //{
+        // Arrête la capture de la webcam pour libérer le hardware
+    //    if (webCamTexture != null)
+    //    {
+    //        webCamTexture.Stop();
+    //    }
+    //}
+
+
     private void OnDestroy()
     {
+        //if (webCamTexture != null)
+        //{
+        //    webCamTexture.Stop();
+        //    webCamTexture = null;
+        //}
+
         if (rgbaMat != null) rgbaMat.Dispose();
         if (grayMat != null) grayMat.Dispose();
         if (prevGrayMat != null) prevGrayMat.Dispose();
         if (faceCascade != null) faceCascade.Dispose();
         if (eyeCascade != null) eyeCascade.Dispose();
     }
+
+   
 }

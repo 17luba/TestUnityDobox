@@ -46,6 +46,8 @@ public class NoteObject : MonoBehaviour
     {
         Debug.Log("<color=yellow>PARFAIT ! Note " + side + " validée.</color>");
 
+        ScoreManager.AddPoints(10); // Ajouter des points au score
+
         // SON
         if (MusicManager.Instance != null)
         {
