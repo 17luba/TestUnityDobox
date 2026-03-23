@@ -133,6 +133,6 @@ public class MusicManager : MonoBehaviour
 
     public void GoToMenu()
     {
-        SceneManager.LoadScene("MenuPrincipal"); // On créera cette scène après
+        SceneManager.LoadScene("MainMenu"); // On créera cette scène après
     }
 }

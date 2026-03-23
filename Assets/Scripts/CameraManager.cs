@@ -38,6 +38,9 @@ public class CameraManager : MonoBehaviour
 
     void Start()
     {
+        // Choix du mode (handicap ou normal) basé sur la sélection du menu
+        modeHandicap = MainMenuManager.selectedHandicapMode;
+
         // 1. Chargement des fichiers XML (doivent être dans Assets/StreamingAssets)
         string facePath = Path.Combine(Application.streamingAssetsPath, "haarcascade_frontalface_default.xml");
         string eyePath = Path.Combine(Application.streamingAssetsPath, "haarcascade_eye.xml");
