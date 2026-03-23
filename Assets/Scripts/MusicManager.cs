@@ -58,6 +58,12 @@ public class MusicManager : MonoBehaviour
                 EndGame();
             }
         }
+
+        // Volume global (pour les sons de notes)
+        if (audioSource != null)
+        {
+            audioSource.volume = SettingsManager.GlobalVolume;
+        }
     }
 
     // Fonction appelée par les notes au moment du Hit

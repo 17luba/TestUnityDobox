@@ -68,6 +68,9 @@ public class CameraManager : MonoBehaviour
     {
         if (webCamTexture != null && webCamTexture.didUpdateThisFrame)
         {
+            // Sensibilité de la camera selon le slider du menu options
+            thresholdMovement = SettingsManager.Sensitivity;
+
             // 1. On récupère l'image actuelle
             rgbaMat = OpenCvSharp.Unity.TextureToMat(webCamTexture);
             Cv2.Flip(rgbaMat, rgbaMat, FlipMode.Y);
